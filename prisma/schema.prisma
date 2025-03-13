@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String         @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          UserRole       @default(VIEWER)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  aiModels      AIModel[]
+  accounts      Account[]
+  emailAccounts EmailAccount[]
+  leads         Lead[]
+  sessions      Session[]
+  workflows     Workflow[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Lead {
+  id                String          @id @default(cuid())
+  email             String          @unique
+  name              String?
+  phone             String?
+  company           String?
+  source            String?
+  status            LeadStatus      @default(NEW)
+  score             Int             @default(0)
+  assignedToId      String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  lastContactedAt   DateTime?
+  notes             String?
+  tags              String[]
+  customFields      Json?
+  appointments      Appointment[]
+  emailConversation EmailMessage[]
+  assignedTo        User?           @relation(fields: [assignedToId], references: [id])
+  workflowStates    WorkflowState[]
+}
+
+model EmailAccount {
+  id             String         @id @default(cuid())
+  name           String
+  email          String
+  provider       EmailProvider
+  credentials    Json
+  userId         String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailsSent     EmailMessage[] @relation("SentEmails")
+  emailsReceived EmailMessage[] @relation("ReceivedEmails")
+}
+
+model EmailMessage {
+  id              String         @id @default(cuid())
+  subject         String
+  body            String
+  htmlBody        String?
+  sentAt          DateTime?
+  receivedAt      DateTime?
+  fromAccountId   String?
+  toAccountId     String?
+  leadId          String?
+  parentMessageId String?
+  analyzed        Boolean        @default(false)
+  analysisResults Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  attachments     Attachment[]
+  fromAccount     EmailAccount?  @relation("SentEmails", fields: [fromAccountId], references: [id])
+  lead            Lead?          @relation(fields: [leadId], references: [id])
+  parentMessage   EmailMessage?  @relation("EmailThread", fields: [parentMessageId], references: [id])
+  replies         EmailMessage[] @relation("EmailThread")
+  toAccount       EmailAccount?  @relation("ReceivedEmails", fields: [toAccountId], references: [id])
+}
+
+model Attachment {
+  id             String       @id @default(cuid())
+  filename       String
+  contentType    String
+  size           Int
+  url            String
+  emailMessageId String
+  createdAt      DateTime     @default(now())
+  emailMessage   EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+}
+
+model Workflow {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean         @default(true)
+  nodes       Json
+  edges       Json
+  createdById String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdBy   User            @relation(fields: [createdById], references: [id])
+  states      WorkflowState[]
+}
+
+model WorkflowState {
+  id          String   @id @default(cuid())
+  workflowId  String
+  leadId      String
+  currentNode String
+  state       Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, leadId])
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  leadId          String
+  location        String?
+  status          AppointmentStatus @default(SCHEDULED)
+  calendarEventId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  lead            Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+model AIModel {
+  id         String       @id @default(cuid())
+  name       String
+  provider   AIProvider
+  apiKey     String?
+  endpoint   String?
+  modelId    String
+  parameters Json?
+  isDefault  Boolean      @default(false)
+  userId     String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usages     ModelUsage[]
+  tests      ModelTest[]
+}
+
+model ModelUsage {
+  id        String   @id @default(cuid())
+  modelId   String
+  date      DateTime @default(now())
+  requests  Int      @default(1)
+  tokens    Int
+  cost      Float?
+  createdAt DateTime @default(now())
+  model     AIModel  @relation(fields: [modelId], references: [id], onDelete: Cascade)
+}
+
+model ModelTest {
+  id           String   @id @default(cuid())
+  modelId      String
+  prompt       String
+  response     String
+  tokens       Int
+  responseTime Float    // in seconds
+  createdAt    DateTime @default(now())
+  model        AIModel  @relation(fields: [modelId], references: [id], onDelete: Cascade)
+}
+
+model Template {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  type        TemplateType
+  content     String
+  variables   String[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  AGENT
+  VIEWER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+  NURTURING
+}
+
+enum EmailProvider {
+  GMAIL
+  OUTLOOK
+  IMAP
+  SMTP
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  RESCHEDULED
+}
+
+enum AIProvider {
+  OPENAI
+  LLAMAINDEX
+}
+
+enum TemplateType {
+  EMAIL
+  WORKFLOW
+  REPORT
+}
