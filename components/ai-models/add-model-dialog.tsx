@@ -31,6 +31,10 @@ type ModelFormData = {
   apiKey: string
   parameters: string
   isDefault: boolean
+  useCase: string
+  costPerToken: number
+  tokenLimit: number
+  contextWindow: number
 }
 
 const initialFormData: ModelFormData = {
@@ -41,6 +45,10 @@ const initialFormData: ModelFormData = {
   apiKey: "",
   parameters: "{}",
   isDefault: false,
+  useCase: "email",
+  costPerToken: 0,
+  tokenLimit: 4000,
+  contextWindow: 8000,
 }
 
 export function AddModelDialog() {
@@ -79,7 +87,13 @@ export function AddModelDialog() {
         modelId: formData.modelId,
         endpoint: formData.endpoint || undefined,
         apiKey: formData.apiKey || undefined,
-        parameters,
+        parameters: {
+          ...parameters,
+          use_case: formData.useCase,
+          cost_per_token: formData.costPerToken,
+          token_limit: formData.tokenLimit,
+          context_window: formData.contextWindow
+        },
         isDefault: formData.isDefault,
       })
 
@@ -197,6 +211,58 @@ export function AddModelDialog() {
                 className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
               />
               <Label htmlFor="isDefault">Set as default model</Label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="useCase">Primary Use Case</Label>
+              <Select value={formData.useCase} onValueChange={(value) => handleSelectChange("useCase", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select use case" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">Email Generation</SelectItem>
+                  <SelectItem value="analysis">Email Analysis</SelectItem>
+                  <SelectItem value="customer_support">Customer Support</SelectItem>
+                  <SelectItem value="marketing">Marketing Content</SelectItem>
+                  <SelectItem value="technical">Technical Content</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="costPerToken">Cost Per 1K Tokens ($)</Label>
+                <Input
+                  id="costPerToken"
+                  name="costPerToken"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={formData.costPerToken}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tokenLimit">Token Limit</Label>
+                <Input
+                  id="tokenLimit"
+                  name="tokenLimit"
+                  type="number"
+                  placeholder="4000"
+                  value={formData.tokenLimit}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contextWindow">Context Window</Label>
+                <Input
+                  id="contextWindow"
+                  name="contextWindow"
+                  type="number"
+                  placeholder="8000"
+                  value={formData.contextWindow}
+                  onChange={handleChange}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>

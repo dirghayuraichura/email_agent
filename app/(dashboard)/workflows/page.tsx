@@ -6,208 +6,187 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Network, Users, MoreHorizontal } from "lucide-react"
+import { Plus, Search, Network, Users, MoreHorizontal, PlusCircle, Settings2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 import { prisma } from "@/lib/prisma"
+import { getWorkflows } from './actions'
+import { formatDistanceToNow } from 'date-fns'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 
-// Define Workflow type
-type Workflow = {
+// Define a more flexible Workflow type
+interface Workflow {
   id: string
   name: string
-  description?: string
+  description: string | null
   isActive: boolean
-  nodes: any[]
-  edges: any[]
-  createdAt: string
-  updatedAt: string
+  nodes: any
+  edges: any
+  createdAt: Date 
+  updatedAt: Date
+  createdById: string
+  createdBy?: {
+    id: string
+    name: string | null
+  }
+  _count?: {
+    states: number
+  }
+  [key: string]: any // Allow additional properties
 }
 
 export default function WorkflowsPage() {
-  const [workflows, setWorkflows] = useState<Workflow[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
+  const [workflows, setWorkflows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const { toast } = useToast()
-  const router = useRouter()
-
-  // Fetch workflows
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filterStatus, setFilterStatus] = useState("all")
+  
   useEffect(() => {
-    const fetchWorkflows = async () => {
+    async function fetchWorkflows() {
       try {
-        const response = await fetch('/api/workflows')
-        if (!response.ok) throw new Error('Failed to fetch workflows')
-        const data = await response.json()
+        setLoading(true)
+        const data = await getWorkflows()
         setWorkflows(data)
       } catch (error) {
-        console.error('Error fetching workflows:', error)
+        console.error("Error fetching workflows:", error)
         toast({
-          title: "Error",
+          title: "Error loading workflows",
           description: "Failed to load workflows. Please try again.",
-          variant: "destructive",
+          variant: "destructive"
         })
+      } finally {
+        setLoading(false)
       }
     }
-
+    
     fetchWorkflows()
   }, [toast])
-
-  const handleToggleActive = async (id: string) => {
-    try {
-      const workflow = workflows.find(w => w.id === id)
-      if (!workflow) return
-
-      const response = await fetch(`/api/workflows/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !workflow.isActive }),
-      })
-
-      if (!response.ok) throw new Error('Failed to update workflow')
-      
-      // Update local state
-      setWorkflows(prev => 
-        prev.map(w => w.id === id ? { ...w, isActive: !w.isActive } : w)
-      )
-
-      toast({
-        title: "Workflow updated",
-        description: "The workflow status has been updated successfully.",
-      })
-    } catch (error) {
-      console.error('Error updating workflow:', error)
-      toast({
-        title: "Error",
-        description: "Failed to update workflow. Please try again.",
-        variant: "destructive",
-      })
-    }
+  
+  // Compute filtered workflows
+  const filteredWorkflows = workflows.filter(workflow => {
+    const matchesSearch = workflow.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (workflow.description || "").toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = filterStatus === "all" || 
+                         (filterStatus === "active" && workflow.isActive) ||
+                         (filterStatus === "inactive" && !workflow.isActive);
+                         
+    return matchesSearch && matchesStatus;
+  });
+  
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      </div>
+    )
   }
-
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this workflow? This action cannot be undone.")) {
-      try {
-        const response = await fetch(`/api/workflows/${id}`, {
-          method: 'DELETE',
-        })
-
-        if (!response.ok) throw new Error('Failed to delete workflow')
-        
-        // Update local state
-        setWorkflows(prev => prev.filter(w => w.id !== id))
-
-        toast({
-          title: "Workflow deleted",
-          description: "The workflow has been deleted successfully.",
-        })
-      } catch (error) {
-        console.error('Error deleting workflow:', error)
-        toast({
-          title: "Error",
-          description: "Failed to delete workflow. Please try again.",
-          variant: "destructive",
-        })
-      }
-    }
-  }
-
-  const filteredWorkflows = workflows.filter((workflow) => {
-    if (!searchQuery) return true
-
-    const query = searchQuery.toLowerCase()
-    return workflow.name.toLowerCase().includes(query) || workflow.description?.toLowerCase().includes(query) || false
-  })
-
+  
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Workflows</h1>
-        <Button asChild>
-          <Link href="/workflows/new">
-            <Plus className="mr-2 h-4 w-4" />
+    <div className="container mx-auto p-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">Workflows</h1>
+          <p className="text-muted-foreground">Automate your sales process with workflows</p>
+        </div>
+        <Link href="/workflows/new">
+          <Button>
+            <PlusCircle className="mr-2 h-4 w-4" />
             Create Workflow
-          </Link>
-        </Button>
+          </Button>
+        </Link>
       </div>
-
-      <div className="relative">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search workflows..."
-          className="pl-8"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex-1">
+          <Label htmlFor="search">Search Workflows</Label>
+          <Input
+            id="search"
+            placeholder="Search by name or description..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="w-full md:w-48">
+          <Label htmlFor="filter">Status</Label>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger id="filter">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Workflows</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredWorkflows.length === 0 ? (
-          <div className="md:col-span-2 lg:col-span-3 flex flex-col items-center justify-center py-8">
-            <p className="text-muted-foreground mb-4">No workflows found.</p>
-            <Button asChild>
-              <Link href="/workflows/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Your First Workflow
-              </Link>
+      
+      {workflows.length === 0 ? (
+        <div className="text-center p-12 border rounded-lg bg-muted/50">
+          <h3 className="text-lg font-medium mb-2">No workflows yet</h3>
+          <p className="text-muted-foreground mb-4">
+            Create your first workflow to automate your sales process
+          </p>
+          <Link href="/workflows/new">
+            <Button>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Create Workflow
             </Button>
-          </div>
-        ) : (
-          filteredWorkflows.map((workflow) => (
-            <Card key={workflow.id} className="overflow-hidden">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <Badge variant={workflow.isActive ? "default" : "outline"}>
-                    {workflow.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Open menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => router.push(`/workflows/${workflow.id}`)}>Edit</DropdownMenuItem>
-                      <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleToggleActive(workflow.id)}>
-                        {workflow.isActive ? "Deactivate" : "Activate"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(workflow.id)}>
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredWorkflows.map((workflow) => (
+            <Card key={workflow.id}>
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>{workflow.name}</CardTitle>
+                    <CardDescription>
+                      {workflow.description || "No description"}
+                    </CardDescription>
+                  </div>
+                  <div className={`px-2 py-1 rounded text-xs ${workflow.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                    {workflow.isActive ? 'Active' : 'Inactive'}
+                  </div>
                 </div>
-                <CardTitle className="text-xl">
-                  <Link href={`/workflows/${workflow.id}`} className="hover:underline">
-                    {workflow.name}
-                  </Link>
-                </CardTitle>
-                <CardDescription>{workflow.description}</CardDescription>
               </CardHeader>
-              <CardContent className="pb-2">
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1">
-                    <Network className="h-4 w-4 text-muted-foreground" />
-                    <span>{workflow.nodes.length} nodes</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span>0 leads</span>
-                  </div>
-                </div>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Created by {workflow.createdBy?.name || 'Unknown'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {workflow._count?.states || 0} active instances
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Updated {formatDistanceToNow(new Date(workflow.updatedAt), { addSuffix: true })}
+                </p>
               </CardContent>
-              <CardFooter className="border-t bg-muted/50 px-6 py-3">
-                <div className="flex w-full items-center justify-between text-xs text-muted-foreground">
-                  <span>Created {new Date(workflow.createdAt).toLocaleDateString()}</span>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/workflows/${workflow.id}`}>View Details</Link>
-                  </Button>
+              <CardFooter>
+                <div className="w-full flex justify-between">
+                  <Link href={`/workflows/${workflow.id}`}>
+                    <Button variant="outline" size="sm">
+                      <Settings2 className="mr-2 h-4 w-4" />
+                      Edit
+                    </Button>
+                  </Link>
+                  <Link href={`/workflows/${workflow.id}/runs`}>
+                    <Button variant="secondary" size="sm">
+                      View Runs
+                    </Button>
+                  </Link>
                 </div>
               </CardFooter>
             </Card>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

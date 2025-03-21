@@ -10,8 +10,11 @@ import { logout } from "@/app/(auth)/logout/action"
 interface User {
   id: string
   email: string
-  name?: string | null
+  name: string | null
+  image: string | null
   role: string
+  createdAt: Date
+  updatedAt: Date
 }
 
 interface AuthContextType {
@@ -77,11 +80,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (retryResult.error) {
             clearAuthTokens()
             setUser(null)
-          } else {
+          } else if (retryResult.user) {
             setUser(retryResult.user)
           }
         }
-      } else {
+      } else if (result.user) {
         setUser(result.user)
       }
     } catch (error) {

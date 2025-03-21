@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -279,6 +280,23 @@ export default function SettingsPage() {
                     value={emailSettings.sendLimit}
                     onChange={(e) => setEmailSettings({ ...emailSettings, sendLimit: e.target.value })}
                   />
+                  <p className="text-sm text-muted-foreground">Maximum number of emails to send per day</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Email Accounts</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Configure your email accounts for sending and receiving emails
+                    </p>
+                  </div>
+                  <Button variant="outline" asChild>
+                    <a href="/settings/email-accounts">Manage Email Accounts</a>
+                  </Button>
                 </div>
               </div>
             </CardContent>

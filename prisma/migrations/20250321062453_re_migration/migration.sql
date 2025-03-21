@@ -11,10 +11,16 @@ CREATE TYPE "EmailProvider" AS ENUM ('GMAIL', 'OUTLOOK', 'IMAP', 'SMTP');
 CREATE TYPE "AppointmentStatus" AS ENUM ('SCHEDULED', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'RESCHEDULED');
 
 -- CreateEnum
-CREATE TYPE "AIProvider" AS ENUM ('OPENAI', 'LLAMAINDEX', 'ANTHROPIC', 'CUSTOM');
+CREATE TYPE "AIProvider" AS ENUM ('OPENAI', 'LLAMAINDEX');
 
 -- CreateEnum
 CREATE TYPE "TemplateType" AS ENUM ('EMAIL', 'WORKFLOW', 'REPORT');
+
+-- CreateEnum
+CREATE TYPE "TaskStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "Priority" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'URGENT');
 
 -- CreateTable
 CREATE TABLE "User" (
@@ -93,7 +99,14 @@ CREATE TABLE "EmailAccount" (
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "provider" "EmailProvider" NOT NULL,
-    "credentials" JSONB NOT NULL,
+    "host" TEXT,
+    "port" INTEGER,
+    "secure" BOOLEAN DEFAULT true,
+    "username" TEXT,
+    "password" TEXT,
+    "fromName" TEXT,
+    "credentials" JSONB,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
     "userId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -113,10 +126,21 @@ CREATE TABLE "EmailMessage" (
     "toAccountId" TEXT,
     "leadId" TEXT,
     "parentMessageId" TEXT,
+    "threadId" TEXT,
+    "messageId" TEXT,
+    "inReplyTo" TEXT,
+    "references" TEXT,
     "analyzed" BOOLEAN NOT NULL DEFAULT false,
     "analysisResults" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "isAiGenerated" BOOLEAN NOT NULL DEFAULT false,
+    "opened" BOOLEAN NOT NULL DEFAULT false,
+    "clicked" BOOLEAN NOT NULL DEFAULT false,
+    "replied" BOOLEAN NOT NULL DEFAULT false,
+    "openedAt" TIMESTAMP(3),
+    "clickedAt" TIMESTAMP(3),
+    "repliedAt" TIMESTAMP(3),
 
     CONSTRAINT "EmailMessage_pkey" PRIMARY KEY ("id")
 );
@@ -197,6 +221,32 @@ CREATE TABLE "AIModel" (
 );
 
 -- CreateTable
+CREATE TABLE "ModelUsage" (
+    "id" TEXT NOT NULL,
+    "modelId" TEXT NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "requests" INTEGER NOT NULL DEFAULT 1,
+    "tokens" INTEGER NOT NULL,
+    "cost" DOUBLE PRECISION,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ModelUsage_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ModelTest" (
+    "id" TEXT NOT NULL,
+    "modelId" TEXT NOT NULL,
+    "prompt" TEXT NOT NULL,
+    "response" TEXT NOT NULL,
+    "tokens" INTEGER NOT NULL,
+    "responseTime" DOUBLE PRECISION NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ModelTest_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Template" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -208,6 +258,82 @@ CREATE TABLE "Template" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Template_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "WorkflowActionLog" (
+    "id" TEXT NOT NULL,
+    "leadId" TEXT NOT NULL,
+    "workflowId" TEXT NOT NULL,
+    "nodeId" TEXT NOT NULL,
+    "actionType" TEXT NOT NULL,
+    "data" JSONB NOT NULL,
+    "status" TEXT NOT NULL,
+    "error" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "WorkflowActionLog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Task" (
+    "id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT,
+    "dueDate" TIMESTAMP(3),
+    "status" "TaskStatus" NOT NULL DEFAULT 'PENDING',
+    "priority" "Priority" NOT NULL DEFAULT 'MEDIUM',
+    "assignedToId" TEXT,
+    "leadId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Task_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Notification" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "isRead" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ABTest" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "audienceId" TEXT,
+    "totalEmails" INTEGER NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endDate" TIMESTAMP(3),
+    "status" TEXT NOT NULL DEFAULT 'running',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ABTest_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ABTestVariant" (
+    "id" TEXT NOT NULL,
+    "testId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "subject" TEXT,
+    "body" TEXT NOT NULL,
+    "modelId" TEXT NOT NULL,
+    "parameters" JSONB NOT NULL DEFAULT '{}',
+    "splitPercentage" DOUBLE PRECISION NOT NULL,
+    "stats" JSONB DEFAULT '{"sent":0,"opens":0,"clicks":0,"replies":0}',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ABTestVariant_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -247,13 +373,13 @@ ALTER TABLE "EmailAccount" ADD CONSTRAINT "EmailAccount_userId_fkey" FOREIGN KEY
 ALTER TABLE "EmailMessage" ADD CONSTRAINT "EmailMessage_fromAccountId_fkey" FOREIGN KEY ("fromAccountId") REFERENCES "EmailAccount"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "EmailMessage" ADD CONSTRAINT "EmailMessage_toAccountId_fkey" FOREIGN KEY ("toAccountId") REFERENCES "EmailAccount"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "EmailMessage" ADD CONSTRAINT "EmailMessage_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "EmailMessage" ADD CONSTRAINT "EmailMessage_parentMessageId_fkey" FOREIGN KEY ("parentMessageId") REFERENCES "EmailMessage"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "EmailMessage" ADD CONSTRAINT "EmailMessage_toAccountId_fkey" FOREIGN KEY ("toAccountId") REFERENCES "EmailAccount"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Attachment" ADD CONSTRAINT "Attachment_emailMessageId_fkey" FOREIGN KEY ("emailMessageId") REFERENCES "EmailMessage"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -262,13 +388,40 @@ ALTER TABLE "Attachment" ADD CONSTRAINT "Attachment_emailMessageId_fkey" FOREIGN
 ALTER TABLE "Workflow" ADD CONSTRAINT "Workflow_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "WorkflowState" ADD CONSTRAINT "WorkflowState_workflowId_fkey" FOREIGN KEY ("workflowId") REFERENCES "Workflow"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "WorkflowState" ADD CONSTRAINT "WorkflowState_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "WorkflowState" ADD CONSTRAINT "WorkflowState_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "WorkflowState" ADD CONSTRAINT "WorkflowState_workflowId_fkey" FOREIGN KEY ("workflowId") REFERENCES "Workflow"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "AIModel" ADD CONSTRAINT "AIModel_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ModelUsage" ADD CONSTRAINT "ModelUsage_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "AIModel"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ModelTest" ADD CONSTRAINT "ModelTest_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "AIModel"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkflowActionLog" ADD CONSTRAINT "WorkflowActionLog_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkflowActionLog" ADD CONSTRAINT "WorkflowActionLog_workflowId_fkey" FOREIGN KEY ("workflowId") REFERENCES "Workflow"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Task" ADD CONSTRAINT "Task_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Task" ADD CONSTRAINT "Task_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ABTest" ADD CONSTRAINT "ABTest_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ABTestVariant" ADD CONSTRAINT "ABTestVariant_testId_fkey" FOREIGN KEY ("testId") REFERENCES "ABTest"("id") ON DELETE CASCADE ON UPDATE CASCADE;

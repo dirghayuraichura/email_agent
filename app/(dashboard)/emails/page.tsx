@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,101 +15,121 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/components/ui/use-toast"
+import { getEmails } from "./action"
 
-// Sample emails
-const emails = [
-  {
-    id: "email_1",
-    subject: "Introduction to our services",
-    sentAt: "2023-04-10T09:30:00Z",
-    fromAccount: {
-      name: "Sales Team",
-      email: "sales@company.com",
-    },
-    toAccount: {
-      name: "John Smith",
-      email: "john.smith@example.com",
-    },
-    leadName: "John Smith",
-    analyzed: true,
-    hasAttachments: false,
-  },
-  {
-    id: "email_2",
-    subject: "Re: Introduction to our services",
-    sentAt: "2023-04-12T14:45:00Z",
-    fromAccount: {
-      name: "John Smith",
-      email: "john.smith@example.com",
-    },
-    toAccount: {
-      name: "Sales Team",
-      email: "sales@company.com",
-    },
-    leadName: "John Smith",
-    analyzed: true,
-    hasAttachments: false,
-  },
-  {
-    id: "email_3",
-    subject: "Enterprise plan details",
-    sentAt: "2023-04-15T10:30:00Z",
-    fromAccount: {
-      name: "Sales Team",
-      email: "sales@company.com",
-    },
-    toAccount: {
-      name: "John Smith",
-      email: "john.smith@example.com",
-    },
-    leadName: "John Smith",
-    analyzed: true,
-    hasAttachments: true,
-  },
-  {
-    id: "email_4",
-    subject: "Product demo request",
-    sentAt: "2023-04-18T11:15:00Z",
-    fromAccount: {
-      name: "Sarah Johnson",
-      email: "sarah.j@example.com",
-    },
-    toAccount: {
-      name: "Sales Team",
-      email: "sales@company.com",
-    },
-    leadName: "Sarah Johnson",
-    analyzed: false,
-    hasAttachments: false,
-  },
-  {
-    id: "email_5",
-    subject: "Follow-up on our conversation",
-    sentAt: "2023-04-20T15:30:00Z",
-    fromAccount: {
-      name: "Sales Team",
-      email: "sales@company.com",
-    },
-    toAccount: {
-      name: "Michael Brown",
-      email: "michael.b@example.com",
-    },
-    leadName: "Michael Brown",
-    analyzed: false,
-    hasAttachments: true,
-  },
-]
+// Define the email type
+interface Email {
+  id: string
+  subject: string
+  body: string
+  htmlBody?: string | null
+  sentAt?: Date | null
+  receivedAt?: Date | null
+  analyzed: boolean
+  fromAccount?: {
+    id: string
+    name: string
+    email: string
+  } | null
+  toAccount?: {
+    id: string
+    name: string
+    email: string
+  } | null
+  lead?: {
+    id: string
+    name?: string | null
+    email: string
+  } | null
+  attachments: Array<{
+    id: string
+    filename: string
+    contentType: string
+    size: number
+    url: string
+  }>
+  createdAt: Date
+  updatedAt: Date
+}
 
 export default function EmailsPage() {
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
+  const [emails, setEmails] = useState<Email[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [filter, setFilter] = useState<'all' | 'sent' | 'received'>('all')
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'subject'>('newest')
+
+  // Fetch emails
+  useEffect(() => {
+    const fetchEmails = async () => {
+      try {
+        const fetchedEmails = await getEmails({ filter })
+        setEmails(fetchedEmails)
+      } catch (error) {
+        console.error("Error fetching emails:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load emails. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    fetchEmails()
+  }, [toast, filter])
+
+  // Filter emails by search query
+  const filteredEmails = emails.filter(email => 
+    email.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (email.fromAccount?.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (email.toAccount?.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (email.lead?.name?.toLowerCase().includes(searchQuery.toLowerCase()))
+  )
+
+  // Sort emails
+  const sortedEmails = [...filteredEmails].sort((a, b) => {
+    if (sortBy === 'newest') {
+      return new Date(b.sentAt || b.createdAt).getTime() - new Date(a.sentAt || a.createdAt).getTime()
+    } else if (sortBy === 'oldest') {
+      return new Date(a.sentAt || a.createdAt).getTime() - new Date(b.sentAt || b.createdAt).getTime()
+    } else if (sortBy === 'subject') {
+      return a.subject.localeCompare(b.subject)
+    }
+    return 0
+  })
+
+  const handleRefresh = async () => {
+    setIsLoading(true)
+    try {
+      const fetchedEmails = await getEmails({ filter })
+      setEmails(fetchedEmails)
+      toast({
+        title: "Emails refreshed",
+        description: "Your emails have been refreshed.",
+      })
+    } catch (error) {
+      console.error("Error refreshing emails:", error)
+      toast({
+        title: "Error",
+        description: "Failed to refresh emails. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Emails</h1>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <RefreshCw className="mr-2 h-4 w-4" />
+          <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Sync
           </Button>
           <Button asChild>
@@ -140,13 +160,27 @@ export default function EmailsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[200px]">
-            <DropdownMenuCheckboxItem checked>Show all emails</DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem>Only sent emails</DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem>Only received emails</DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem>With attachments</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem 
+              checked={filter === 'all'} 
+              onCheckedChange={() => setFilter('all')}
+            >
+              Show all emails
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem 
+              checked={filter === 'sent'} 
+              onCheckedChange={() => setFilter('sent')}
+            >
+              Only sent emails
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem 
+              checked={filter === 'received'} 
+              onCheckedChange={() => setFilter('received')}
+            >
+              Only received emails
+            </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Select defaultValue="newest">
+        <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
@@ -175,46 +209,82 @@ export default function EmailsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {emails.map((email) => (
-              <TableRow key={email.id}>
-                <TableCell className="font-medium">
-                  <Link href={`/emails/${email.id}`} className="hover:underline flex items-center">
-                    {email.subject}
-                    {email.hasAttachments && <span className="ml-2 text-muted-foreground">📎</span>}
-                  </Link>
-                </TableCell>
-                <TableCell>{email.fromAccount.name}</TableCell>
-                <TableCell>{email.toAccount.name}</TableCell>
-                <TableCell>
-                  <Link href={`/leads/${email.leadName.toLowerCase().replace(" ", "-")}`} className="hover:underline">
-                    {email.leadName}
-                  </Link>
-                </TableCell>
-                <TableCell>{new Date(email.sentAt).toLocaleDateString()}</TableCell>
-                <TableCell>
-                  <Badge variant={email.analyzed ? "outline" : "secondary"}>
-                    {email.analyzed ? "Analyzed" : "Pending"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Open menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>View</DropdownMenuItem>
-                      <DropdownMenuItem>Reply</DropdownMenuItem>
-                      <DropdownMenuItem>Forward</DropdownMenuItem>
-                      <DropdownMenuItem>Analyze</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center">
+                  <RefreshCw className="h-5 w-5 animate-spin mx-auto" />
+                  <p className="text-sm text-muted-foreground mt-2">Loading emails...</p>
                 </TableCell>
               </TableRow>
-            ))}
+            ) : sortedEmails.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center">
+                  <Mail className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">No emails found</p>
+                  <Button variant="link" asChild className="mt-2">
+                    <Link href="/emails/compose">Compose a new email</Link>
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ) : (
+              sortedEmails.map((email) => (
+                <TableRow key={email.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/emails/${email.id}`} className="hover:underline flex items-center">
+                      {email.subject}
+                      {email.attachments.length > 0 && <span className="ml-2 text-muted-foreground">📎</span>}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{email.fromAccount?.name || email.fromAccount?.email || "Unknown"}</TableCell>
+                  <TableCell>{email.toAccount?.name || email.toAccount?.email || "Unknown"}</TableCell>
+                  <TableCell>
+                    {email.lead ? (
+                      <Link href={`/leads/${email.lead.id}`} className="hover:underline">
+                        {email.lead.name || email.lead.email}
+                      </Link>
+                    ) : (
+                      "N/A"
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {email.sentAt 
+                      ? new Date(email.sentAt).toLocaleDateString() 
+                      : email.receivedAt 
+                        ? new Date(email.receivedAt).toLocaleDateString()
+                        : new Date(email.createdAt).toLocaleDateString()
+                    }
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={email.analyzed ? "outline" : "secondary"}>
+                      {email.analyzed ? "Analyzed" : "Pending"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Open menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/emails/${email.id}`}>View</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/emails/compose?replyTo=${email.id}`}>Reply</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/emails/compose?forward=${email.id}`}>Forward</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>Analyze</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

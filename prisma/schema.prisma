@@ -24,6 +24,9 @@ model User {
   leads         Lead[]
   sessions      Session[]
   workflows     Workflow[]
+  tasks         Task[]
+  notifications Notification[]
+  ABTest        ABTest[]
 }
 
 model Account {
@@ -61,25 +64,27 @@ model VerificationToken {
 }
 
 model Lead {
-  id                String          @id @default(cuid())
-  email             String          @unique
+  id                String              @id @default(cuid())
+  email             String              @unique
   name              String?
   phone             String?
   company           String?
   source            String?
-  status            LeadStatus      @default(NEW)
-  score             Int             @default(0)
+  status            LeadStatus          @default(NEW)
+  score             Int                 @default(0)
   assignedToId      String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
   lastContactedAt   DateTime?
   notes             String?
   tags              String[]
   customFields      Json?
   appointments      Appointment[]
   emailConversation EmailMessage[]
-  assignedTo        User?           @relation(fields: [assignedToId], references: [id])
+  assignedTo        User?               @relation(fields: [assignedToId], references: [id])
   workflowStates    WorkflowState[]
+  workflowLogs      WorkflowActionLog[]
+  tasks             Task[]
 }
 
 model EmailAccount {
@@ -87,7 +92,14 @@ model EmailAccount {
   name           String
   email          String
   provider       EmailProvider
-  credentials    Json
+  host           String?
+  port           Int?
+  secure         Boolean?       @default(true)
+  username       String?
+  password       String?
+  fromName       String?
+  credentials    Json?
+  isActive       Boolean        @default(true)
   userId         String
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -107,6 +119,10 @@ model EmailMessage {
   toAccountId     String?
   leadId          String?
   parentMessageId String?
+  threadId        String?
+  messageId       String?
+  inReplyTo       String?
+  references      String?
   analyzed        Boolean        @default(false)
   analysisResults Json?
   createdAt       DateTime       @default(now())
@@ -117,6 +133,13 @@ model EmailMessage {
   parentMessage   EmailMessage?  @relation("EmailThread", fields: [parentMessageId], references: [id])
   replies         EmailMessage[] @relation("EmailThread")
   toAccount       EmailAccount?  @relation("ReceivedEmails", fields: [toAccountId], references: [id])
+  isAiGenerated   Boolean        @default(false)
+  opened          Boolean        @default(false)
+  clicked         Boolean        @default(false)
+  replied         Boolean        @default(false)
+  openedAt        DateTime?
+  clickedAt       DateTime?
+  repliedAt       DateTime?
 }
 
 model Attachment {
@@ -131,17 +154,18 @@ model Attachment {
 }
 
 model Workflow {
-  id          String          @id @default(cuid())
+  id          String              @id @default(cuid())
   name        String
   description String?
-  isActive    Boolean         @default(true)
+  isActive    Boolean             @default(true)
   nodes       Json
   edges       Json
   createdById String
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  createdBy   User            @relation(fields: [createdById], references: [id])
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  createdBy   User                @relation(fields: [createdById], references: [id])
   states      WorkflowState[]
+  logs        WorkflowActionLog[]
 }
 
 model WorkflowState {
@@ -207,7 +231,7 @@ model ModelTest {
   prompt       String
   response     String
   tokens       Int
-  responseTime Float    // in seconds
+  responseTime Float // in seconds
   createdAt    DateTime @default(now())
   model        AIModel  @relation(fields: [modelId], references: [id], onDelete: Cascade)
 }
@@ -221,6 +245,75 @@ model Template {
   variables   String[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+}
+
+model WorkflowActionLog {
+  id         String   @id @default(cuid())
+  leadId     String
+  workflowId String
+  nodeId     String
+  actionType String
+  data       Json
+  status     String // SUCCESS, FAILED, PENDING
+  error      String?
+  createdAt  DateTime @default(now())
+  lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id           String     @id @default(cuid())
+  title        String
+  description  String?
+  dueDate      DateTime?
+  status       TaskStatus @default(PENDING)
+  priority     Priority   @default(MEDIUM)
+  assignedToId String?
+  leadId       String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  assignedTo   User?      @relation(fields: [assignedToId], references: [id])
+  lead         Lead?      @relation(fields: [leadId], references: [id], onDelete: SetNull)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ABTest {
+  id          String          @id @default(cuid())
+  name        String
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audienceId  String?
+  totalEmails Int
+  startDate   DateTime        @default(now())
+  endDate     DateTime?
+  status      String          @default("running") // running, completed, scheduled
+  variants    ABTestVariant[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model ABTestVariant {
+  id              String   @id @default(cuid())
+  testId          String
+  test            ABTest   @relation(fields: [testId], references: [id], onDelete: Cascade)
+  name            String
+  subject         String?
+  body            String
+  modelId         String
+  parameters      Json     @default("{}")
+  splitPercentage Float
+  stats           Json?    @default("{\"sent\":0,\"opens\":0,\"clicks\":0,\"replies\":0}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 enum UserRole {
@@ -263,4 +356,18 @@ enum TemplateType {
   EMAIL
   WORKFLOW
   REPORT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }

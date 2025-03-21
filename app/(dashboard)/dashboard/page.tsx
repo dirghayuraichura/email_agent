@@ -1,11 +1,25 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Users, Mail, Calendar, ArrowUpRight, ArrowDownRight, BarChart3 } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
 
 export default function DashboardPage() {
+  const { user } = useAuth()
+  const [cookieInfo, setCookieInfo] = useState<string>("")
+
+  useEffect(() => {
+    // Check cookies in client side
+    setCookieInfo(document.cookie)
+  }, [])
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+    
+      
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
