@@ -6,6 +6,8 @@ import { generateTokens } from "@/lib/server/token-utils";
 
 const prisma = new PrismaClient();
 
+export const dynamic = 'force-dynamic';
+
 export async function refreshToken(): Promise<{ accessToken: string; sessionToken: string; } | { error: string }> {
   try {
     // Get the session token from the cookie

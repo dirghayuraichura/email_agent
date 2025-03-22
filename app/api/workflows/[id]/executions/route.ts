@@ -165,4 +165,6 @@ export async function POST(
       error: 'Failed to trigger workflow'
     }, { status: 500 });
   }
-} 
+}
+
+export const dynamic = 'force-dynamic'; 
