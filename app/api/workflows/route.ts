@@ -1,55 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getSession } from '@/lib/session';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    const session = await getSession();
+    
+    if (!session?.userId) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
     const workflows = await prisma.workflow.findMany({
-      orderBy: {
-        createdAt: 'desc',
+      where: {
+        createdById: session.userId
       },
+      orderBy: {
+        updatedAt: 'desc'
+      }
     });
 
     return NextResponse.json(workflows);
   } catch (error) {
     console.error('Error fetching workflows:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch workflows' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch workflows' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const data = await request.json();
+    const session = await getSession();
     
-    // Get the current user (in a real app, you'd get this from the session)
-    const user = await prisma.user.findFirst();
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not authenticated' },
-        { status: 401 }
-      );
+    if (!session?.userId) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
+
+    const data = await request.json();
     
     const workflow = await prisma.workflow.create({
       data: {
-        name: data.name,
-        description: data.description,
-        isActive: data.isActive,
-        nodes: data.nodes,
-        edges: data.edges,
-        createdById: user.id,
-      },
+        ...data,
+        userId: session.userId
+      }
     });
 
     return NextResponse.json(workflow);
   } catch (error) {
     console.error('Error creating workflow:', error);
-    return NextResponse.json(
-      { error: 'Failed to create workflow' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create workflow' }, { status: 500 });
   }
 } 
