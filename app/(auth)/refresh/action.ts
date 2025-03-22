@@ -1,20 +1,23 @@
 'use server';
 
 import { cookies } from "next/headers";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { generateTokens } from "@/lib/server/token-utils";
 
-const prisma = new PrismaClient();
-
-export const dynamic = 'force-dynamic';
-
-export async function refreshToken(): Promise<{ accessToken: string; sessionToken: string; } | { error: string }> {
+export async function refreshToken(): Promise<{ 
+  accessToken: string; 
+  sessionToken: string; 
+  success?: boolean;
+} | { 
+  error: string;
+  success: false; 
+}> {
   try {
     // Get the session token from the cookie
     const sessionToken = cookies().get('sessionToken')?.value;
     
     if (!sessionToken) {
-      return { error: 'Not authenticated' };
+      return { error: 'Not authenticated', success: false };
     }
 
     // Find valid session
@@ -32,7 +35,7 @@ export async function refreshToken(): Promise<{ accessToken: string; sessionToke
       // Clear the session cookie
       cookies().delete('sessionToken');
       
-      return { error: 'Invalid or expired session' };
+      return { error: 'Invalid or expired session', success: false };
     }
 
     const tokens = generateTokens(session.user);
@@ -50,17 +53,18 @@ export async function refreshToken(): Promise<{ accessToken: string; sessionToke
     cookies().set('sessionToken', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24, // 24 hours
     });
 
     return { 
       accessToken: tokens.accessToken, 
-      sessionToken: tokens.refreshToken
+      sessionToken: tokens.refreshToken,
+      success: true
     };
   } catch (error) {
     console.error('Refresh token error:', error);
-    return { error: 'Internal server error' };
+    return { error: 'Internal server error', success: false };
   }
 } 
