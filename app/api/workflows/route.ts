@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const workflow = await prisma.workflow.create({
       data: {
         ...data,
-        userId: session.userId
+        createdById: session.userId
       }
     });
 
