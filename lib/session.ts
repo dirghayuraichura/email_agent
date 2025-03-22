@@ -22,4 +22,20 @@ export async function getSession() {
     userId: session.userId,
     user: session.user
   }
+}
+
+export async function createSession(userId: string, sessionToken: string) {
+  return prisma.session.create({
+    data: {
+      userId,
+      sessionToken,
+      expires: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+    }
+  })
+}
+
+export async function deleteSession(sessionToken: string) {
+  return prisma.session.delete({
+    where: { sessionToken }
+  })
 } 
