@@ -20,9 +20,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { Workflow } from "@/lib/data-context"
 import { TriggerNode } from "./nodes/trigger-node"
-import { EmailNode } from "./nodes/email-node"
+//import { EmailNode } from "./nodes/email-node"
 import { DelayNode } from "./nodes/delay-node"
 import { ConditionNode } from "./nodes/condition-node"
+import { EmailNode } from "./nodes/email-node"
 
 // Define custom node types
 const nodeTypes: NodeTypes = {
